@@ -1,0 +1,239 @@
+{
+  "info": {
+    "name": "Bug Tracking System API",
+    "description": "Import this into Postman, then set the collection variables base_url and token (token is filled automatically after Login if you use the provided test scripts).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5000/api" },
+    { "key": "token", "value": "" },
+    { "key": "bug_id", "value": "" },
+    { "key": "developer_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Tester\",\n  \"email\": \"jane.tester@example.com\",\n  \"password\": \"Passw0rd!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success) { pm.collectionVariables.set('token', body.data.token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane.tester@example.com\",\n  \"password\": \"Passw0rd!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List All Users (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/users"
+          }
+        },
+        {
+          "name": "List Developers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/users/developers"
+          }
+        },
+        {
+          "name": "Update User Role (admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{base_url}}/users/REPLACE_WITH_USER_ID/role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"developer\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bugs",
+      "item": [
+        {
+          "name": "Create Bug",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success) { pm.collectionVariables.set('bug_id', body.data.bug.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{base_url}}/bugs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Login button unresponsive\",\n  \"description\": \"Clicking login does nothing on Safari 17.\",\n  \"severity\": \"Major\",\n  \"priority\": \"High\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get All Bugs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/bugs?status=Open"
+          }
+        },
+        {
+          "name": "Get Single Bug",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/bugs/{{bug_id}}"
+          }
+        },
+        {
+          "name": "Update Bug (admin: severity/priority)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{base_url}}/bugs/{{bug_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"Medium\",\n  \"severity\": \"Major\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Assign Bug to Developer (admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{base_url}}/bugs/{{bug_id}}/assign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"{{developer_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Change Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{base_url}}/bugs/{{bug_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Bug History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/bugs/{{bug_id}}/history"
+          }
+        },
+        {
+          "name": "Delete Bug (admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/bugs/{{bug_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "item": [
+        {
+          "name": "Add Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{base_url}}/bugs/{{bug_id}}/comments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"I can reproduce this on Chrome as well.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Comments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/bugs/{{bug_id}}/comments"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "request": { "method": "GET", "url": "{{base_url}}/health" }
+    }
+  ]
+}
