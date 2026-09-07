@@ -100,7 +100,7 @@ pip install -r requirements.txt
 
 # 3. Configure environment variables
 cp .env.example .env
-# then edit .env and fill in SUPABASE_URL, SUPABASE_KEY, JWT_SECRET_KEY
+# and edit .env and fill in SUPABASE_URL, SUPABASE_KEY, JWT_SECRET_KEY
 
 # 4. Run the server
 python run.py
