@@ -284,7 +284,7 @@ your `.env` points at, so consider using a separate test project.
 
 ---
 
-## 10. Backend Workflow Summary
+## 10. Backend Workflow Summary for this project
 
 1. A **Tester** finds a bug and calls `POST /api/bugs` — it's stored in
    Supabase with `status = "Open"` and a `created` entry is written to
