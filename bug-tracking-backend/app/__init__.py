@@ -42,6 +42,7 @@ def create_app(config_overrides=None, supabase_client=None):
     from app.routes.auth import auth_bp
     from app.routes.bugs import bugs_bp
     from app.routes.comments import comments_bp
+    from app.routes.health import health_bp
     from app.routes.notifications import notifications_bp
     from app.routes.projects import projects_bp
     from app.routes.support import support_bp
@@ -55,10 +56,7 @@ def create_app(config_overrides=None, supabase_client=None):
     app.register_blueprint(admin_requests_bp, url_prefix="/api/admin-requests")
     app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
     app.register_blueprint(support_bp, url_prefix="/api/support")
-
-    @app.route("/api/health")
-    def health():
-        return {"success": True, "message": "Bug Tracking API is running"}
+    app.register_blueprint(health_bp, url_prefix="/api/health")
 
     register_error_handlers(app)
     return app

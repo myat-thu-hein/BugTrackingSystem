@@ -1,5 +1,5 @@
-import { Bot, MessageCircleQuestion, Send, ThumbsUp, UserRound, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bot, MessageCircleQuestion, RotateCcw, Send, ThumbsUp, UserRound, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QUESTION_MAX } from '@/config/constants'
 import { getErrorMessage } from '@/services/api'
 import { askQuestion, getFaqs, recordFaqHit } from '@/services/supportService'
@@ -57,20 +57,41 @@ function Chip({ children, onClick, disabled }) {
  */
 export default function SupportChat() {
   const [open, setOpen] = useState(false)
-  const [faqs, setFaqs] = useState(null)
+  const [faqs, setFaqs] = useState(null) // null until the first successful load
+  const [loadError, setLoadError] = useState('')
   const [messages, setMessages] = useState([message(GREETING)])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const endRef = useRef(null)
   const inputRef = useRef(null)
 
-  // Load the FAQ the first time the chat is opened.
+  // The FAQ is (re)loaded every time the chat opens, so answers an admin just
+  // added are available without reloading the page. A failed load is NOT
+  // remembered as "no FAQs" (that used to make the chat useless until a page
+  // reload, e.g. when the server was still waking up); it can be retried.
+  const loadingRef = useRef(null)
+  const loadFaqs = useCallback(() => {
+    if (!loadingRef.current) {
+      setLoadError('')
+      loadingRef.current = getFaqs()
+        .then((rows) => {
+          setFaqs(rows)
+          return rows
+        })
+        .catch((err) => {
+          setLoadError(getErrorMessage(err))
+          return null
+        })
+        .finally(() => {
+          loadingRef.current = null
+        })
+    }
+    return loadingRef.current
+  }, [])
+
   useEffect(() => {
-    if (!open || faqs) return
-    getFaqs()
-      .then(setFaqs)
-      .catch(() => setFaqs([]))
-  }, [open, faqs])
+    if (open) loadFaqs()
+  }, [open, loadFaqs])
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: 'end' })
@@ -87,12 +108,26 @@ export default function SupportChat() {
     push({ from: 'bot', text: faq.answer, faq, alternatives, kind: 'answer' })
   }
 
-  function ask(question) {
+  async function ask(question) {
     const trimmed = question.trim()
     if (!trimmed) return
     setText('')
     push({ from: 'user', text: trimmed })
-    const match = findBestFaq(trimmed, faqs ?? [])
+
+    // A question typed while the FAQ is still loading waits for it, instead
+    // of being matched against an empty list.
+    // Likewise when the chat was just reopened and a refresh is in flight:
+    // use the fresh list, not the one from last time.
+    const available = loadingRef.current || faqs === null ? await loadFaqs() : faqs
+    if (available === null) {
+      push({ from: 'bot', text: "I couldn't load the FAQ just now. You can still send your question to your admin.", kind: 'no-match', question: trimmed })
+      return
+    }
+    if (available.length === 0) {
+      push({ from: 'bot', text: "This project doesn't have any FAQs yet, so I can't answer that myself.", kind: 'no-match', question: trimmed })
+      return
+    }
+    const match = findBestFaq(trimmed, available)
     if (match) answerWith(match.faq, match.alternatives)
     else push({ from: 'bot', text: "I couldn't find an answer to that in this project's FAQ.", kind: 'no-match', question: trimmed })
   }
@@ -187,23 +222,36 @@ export default function SupportChat() {
               </div>
             ))}
 
-            {messages.length === 1 && (
-              <div className="ml-9 flex flex-col items-start gap-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Most asked</p>
-                {faqs === null ? (
-                  <p className="text-xs text-gray-400">Loading...</p>
-                ) : suggestions.length === 0 ? (
-                  <p className="text-xs text-gray-400">No FAQs yet. Type your question below.</p>
-                ) : (
-                  suggestions.map((faq) => (
-                    <Chip key={faq.id} onClick={() => pickSuggestion(faq)}>
-                      {faq.question}
-                    </Chip>
-                  ))
-                )}
+            <div ref={endRef} />
+          </div>
+
+          {/* Always visible, so new FAQs, load errors and the most asked
+              questions show up at any point in the conversation. */}
+          <div className="border-t border-gray-100 px-3 pt-2.5">
+            {loadError && faqs === null ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs text-red-600">Couldn&apos;t load the FAQ: {loadError}</p>
+                <Chip onClick={loadFaqs}>
+                  <RotateCcw size={12} className="mr-1 inline" aria-hidden="true" />
+                  Try again
+                </Chip>
+              </div>
+            ) : faqs === null ? (
+              <p className="text-xs text-gray-400">Loading the FAQ...</p>
+            ) : suggestions.length === 0 ? (
+              <p className="text-xs text-gray-500">This project has no FAQs yet. Type your question and I&apos;ll pass it to your admin.</p>
+            ) : (
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Most asked</p>
+                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+                  {suggestions.map((faq) => (
+                    <span key={faq.id} className="shrink-0">
+                      <Chip onClick={() => pickSuggestion(faq)}>{faq.question}</Chip>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
-            <div ref={endRef} />
           </div>
 
           <form
@@ -211,7 +259,7 @@ export default function SupportChat() {
               event.preventDefault()
               ask(text)
             }}
-            className="flex items-center gap-2 border-t border-gray-100 p-3"
+            className="flex items-center gap-2 p-3 pt-2"
           >
             <input
               ref={inputRef}

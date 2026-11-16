@@ -29,6 +29,27 @@ describe('findBestFaq', () => {
   })
 })
 
+describe('forgiving matching', () => {
+  it('tolerates typos and partial words', () => {
+    expect(best('how to turn of emial notifcations')).toBe('email')
+    expect(best('reopn')).toBe('reopen')
+    expect(best('reopn a bug that is not fixd')).toBe('reopen')
+    expect(best('notif settings')).toBe('email')
+  })
+
+  it('matches FAQs written in other languages', () => {
+    const thai = [...FAQS, { id: 'th', question: 'จะเปิดบั๊กใหม่ได้อย่างไร', answer: 'คลิก Create Bug', keywords: '', hits: 0 }]
+    expect(findBestFaq('เปิดบั๊กใหม่', thai)?.faq.id).toBe('th')
+    const accented = [...FAQS, { id: 'fr', question: 'Comment créer un rapport?', answer: '...', keywords: 'créer rapport', hits: 0 }]
+    expect(findBestFaq('créer rapport', accented)?.faq.id).toBe('fr')
+  })
+
+  it('still rejects unrelated short words', () => {
+    expect(best('cat')).toBeNull()
+    expect(best('สวัสดี')).toBeNull() // "hello" in Thai
+  })
+})
+
 describe('tokenize / topFaqs', () => {
   it('drops filler words and normalises forms', () => {
     expect(tokenize('How do I reopening the Bugs?')).toEqual(['reopen', 'bug'])

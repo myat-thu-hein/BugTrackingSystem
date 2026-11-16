@@ -48,7 +48,13 @@ const STATUS_MESSAGES = {
 export function getErrorMessage(error) {
   if (!error?.response) return 'Unable to reach the server. Please check your connection.'
   const { status, data } = error.response
-  if (status >= 500) return FALLBACK_MESSAGE
+  if (status >= 500) {
+    // Show the server's explanation when it gave a specific one (e.g. a missing
+    // database table); otherwise say which status it was, which makes problems
+    // like 502 "server restarting" vs 500 "code error" easy to tell apart.
+    const specific = data?.message && data.message !== 'Internal server error' ? data.message : null
+    return specific ?? `The server ran into a problem (error ${status}). Please try again in a moment.`
+  }
   return data?.message || STATUS_MESSAGES[status] || FALLBACK_MESSAGE
 }
 

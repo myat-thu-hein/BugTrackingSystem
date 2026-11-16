@@ -7,7 +7,7 @@ A team bug tracker for multiple projects, with an enforced workflow
 
 | Feature | How it works |
 |---|---|
-| **Projects + invite codes** | An admin creates a project and gets a code like `BUG-7KQ2X9`. Teammates register with it and join as Testers; the admin promotes them. Each project's bugs and members are invisible to other projects. |
+| **Projects + invite codes** | An admin creates a project and gets a code like `BUG-7KQ2Xt9`. Teammates register with it and join as Testers; the admin promotes them. Each project's bugs and members are invisible to other projects. |
 | **Owner approval for admins** | "Request admin access" on the Register page notifies and emails the owners (you and your team, set in `OWNER_EMAILS`), who approve or reject in the app. |
 | **Live notifications** | Bell with unread badge, toasts and a Notifications page, updated instantly over Server-Sent Events. Open dashboards, lists and bug pages refresh themselves when something changes. |
 | **Email** | Important events only (assigned to you, ready to verify, reopened, role changed, admin requests, support questions). Off switch in Settings. Works with any SMTP account, e.g. Gmail. |
@@ -43,6 +43,6 @@ Use three windows (or one normal + two private windows), one per person.
 3. Frontend: `cd bug-tracking-frontend && npm install && cp .env.example .env && npm run dev`.
 4. Checkpoint: open `http://localhost:5173`, register with an owner email, and you land on **Admin Requests**.
 
-Upgrading a database made with the older version? Run `bug-tracking-backend/sql/migrations/001_projects_notifications_support.sql` once.
+Upgrading a database made with an older version? In the Supabase SQL Editor run, in order: `bug-tracking-backend/sql/migrations/001_projects_notifications_support.sql` (if not run yet), `002_seed_starter_faqs.sql` and `003_grant_service_role.sql`. All three are safe to re-run.
 
 See [REFACTOR_NOTES.md](REFACTOR_NOTES.md) for what changed in each cleanup pass, the bugs found, and how it was verified.

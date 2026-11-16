@@ -54,6 +54,22 @@ class FakeSupabase:
         return (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=self._tick)).isoformat()
 
 
+class FakeAPIError(Exception):
+    """Shaped like postgrest.exceptions.APIError for a table that doesn't exist."""
+
+    def __init__(self, table):
+        self.code = "PGRST205"
+        super().__init__(f"Could not find the table 'public.{table}' in the schema cache")
+
+
+class FakePermissionError(Exception):
+    """Shaped like postgrest's APIError for a table service_role wasn't GRANTed."""
+
+    def __init__(self, table):
+        self.code = "42501"
+        super().__init__(f"permission denied for table {table}")
+
+
 class FakeQuery:
     def __init__(self, db, table):
         self.db, self.table_name = db, table
@@ -96,6 +112,10 @@ class FakeQuery:
 
     # --- execution ---
     def execute(self):
+        if self.table_name not in self.db.tables:
+            raise FakeAPIError(self.table_name)
+        if self.table_name in getattr(self.db, "denied", ()):
+            raise FakePermissionError(self.table_name)
         rows = self.db.tables[self.table_name]
         matching = [r for r in rows if all(f(r) for f in self._filters)]
 

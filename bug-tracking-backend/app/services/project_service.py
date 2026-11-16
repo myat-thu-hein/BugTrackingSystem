@@ -118,8 +118,23 @@ DEFAULT_FAQS = [
 
 
 def seed_default_faqs(project_id):
+    """
+    Add the starter FAQs this project doesn't have yet (matched by question
+    text), so it is safe to run more than once. Returns the rows added.
+    """
     db = get_db()
+    existing = {
+        row["question"].strip().lower()
+        for row in db.table("faqs").select("question").eq("project_id", project_id).execute().data
+    }
+    added = []
     for question, answer, keywords in DEFAULT_FAQS:
-        db.table("faqs").insert(
-            {"project_id": project_id, "question": question, "answer": answer, "keywords": keywords, "hits": 0}
-        ).execute()
+        if question.lower() in existing:
+            continue
+        added.append(
+            db.table("faqs")
+            .insert({"project_id": project_id, "question": question, "answer": answer, "keywords": keywords, "hits": 0})
+            .execute()
+            .data[0]
+        )
+    return added

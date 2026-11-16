@@ -9,9 +9,16 @@ import SegmentedControl from '@/components/ui/SegmentedControl'
 import { useNotifications } from '@/hooks/useNotifications'
 import { usePageTitle } from '@/hooks/usePageTitle'
 
+const MODE_DOT = { live: 'bg-green-500', connecting: 'bg-gray-300', polling: 'bg-amber-400' }
+const MODE_TEXT = {
+  live: 'Live: new activity appears here instantly.',
+  connecting: 'Connecting... new activity will still appear.',
+  polling: 'Checking for new activity every few seconds.',
+}
+
 export default function Notifications() {
   usePageTitle('Notifications')
-  const { items, unreadCount, live, markRead, markAllRead } = useNotifications()
+  const { items, unreadCount, mode, markRead, markAllRead } = useNotifications()
   const navigate = useNavigate()
   const [filter, setFilter] = useState('all')
   const visible = filter === 'unread' ? items.filter((n) => !n.is_read) : items
@@ -27,8 +34,8 @@ export default function Notifications() {
         title="Notifications"
         subtitle={
           <span className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${live ? 'bg-green-500' : 'bg-gray-300'}`} aria-hidden="true" />
-            {live ? 'Live: new activity appears here instantly.' : 'Reconnecting... new activity will still appear.'}
+            <span className={`h-2 w-2 rounded-full ${MODE_DOT[mode]}`} aria-hidden="true" />
+            {MODE_TEXT[mode]}
           </span>
         }
         actions={

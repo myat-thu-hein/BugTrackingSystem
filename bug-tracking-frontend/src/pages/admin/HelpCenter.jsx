@@ -1,4 +1,4 @@
-import { CheckCircle2, LifeBuoy, MessageCircleQuestion, Pencil, Plus, Send, Trash2 } from 'lucide-react'
+import { CheckCircle2, LifeBuoy, MessageCircleQuestion, Pencil, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import EmptyState from '@/components/feedback/EmptyState'
 import ErrorState from '@/components/feedback/ErrorState'
@@ -147,6 +147,7 @@ export default function HelpCenter() {
   const [editing, setEditing] = useState(undefined) // undefined: closed, null: new, object: edit
   const [deleting, setDeleting] = useState(null)
   const [deletingBusy, setDeletingBusy] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
   // A teammate's new question appears here live.
   useLiveRefresh(questionsFetch.reload, (notification) => notification.type === 'support_question')
@@ -177,6 +178,19 @@ export default function HelpCenter() {
     faqsFetch.setData((current) =>
       current.some((f) => f.id === saved.id) ? current.map((f) => (f.id === saved.id ? saved : f)) : [...current, saved],
     )
+  }
+
+  async function addStarterFaqs() {
+    setSeeding(true)
+    try {
+      const { faqs: added, message } = await support.addDefaultFaqs()
+      faqsFetch.setData((current) => [...current, ...(added ?? [])])
+      toast.success(`${message}.`)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSeeding(false)
+    }
   }
 
   async function confirmDelete() {
@@ -236,7 +250,15 @@ export default function HelpCenter() {
         </div>
         {faqs.length === 0 ? (
           <div className="card">
-            <EmptyState message="No FAQs yet." description="Add the questions your team asks most." />
+            <EmptyState
+              message="No FAQs yet, so the help chat can't answer anything."
+              description="Start with the built-in questions about using the bug tracker, then add your own."
+              action={
+                <Button icon={Sparkles} loading={seeding} loadingText="Adding..." onClick={addStarterFaqs} className="mt-2">
+                  Add starter FAQs
+                </Button>
+              }
+            />
           </div>
         ) : (
           <ul className="card divide-y divide-gray-100">

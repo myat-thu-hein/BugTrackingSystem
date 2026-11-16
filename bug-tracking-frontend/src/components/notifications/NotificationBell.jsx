@@ -8,7 +8,7 @@ const PREVIEW_COUNT = 6
 
 /** Bell with a live unread badge; opens the latest notifications. */
 export default function NotificationBell() {
-  const { items, unreadCount, live, markRead, markAllRead } = useNotifications()
+  const { items, unreadCount, mode, markRead, markAllRead } = useNotifications()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -56,7 +56,10 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <p className="flex items-center gap-2 text-sm font-semibold text-gray-800">
               Notifications
-              <span className={`h-2 w-2 rounded-full ${live ? 'bg-green-500' : 'bg-gray-300'}`} title={live ? 'Live' : 'Reconnecting...'} />
+              <span
+                className={`h-2 w-2 rounded-full ${{ live: 'bg-green-500', polling: 'bg-amber-400' }[mode] ?? 'bg-gray-300'}`}
+                title={{ live: 'Live', polling: 'Checking every few seconds' }[mode] ?? 'Connecting...'}
+              />
             </p>
             {unreadCount > 0 && (
               <button type="button" onClick={markAllRead} className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline">
