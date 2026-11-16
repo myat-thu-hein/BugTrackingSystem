@@ -102,6 +102,24 @@ create table if not exists support_questions (
 );
 create index if not exists idx_support_questions_project on support_questions (project_id, status);
 
+-- 5b. Starter FAQs for every project that has none, so the help chat can answer
+-- straight away. Projects that already have FAQs are left alone.
+insert into faqs (project_id, question, answer, keywords, hits)
+select p.id, d.question, d.answer, d.keywords, 0
+from projects p
+cross join (values
+        ('How do I report a bug?', 'Testers can click ''Create Bug'' in the sidebar. Give it a clear title, the steps to reproduce, what you expected and what actually happened, then pick a priority and severity.', 'report create new submit add file log'),
+        ('Why can''t I see some bugs?', 'Developers only see bugs that are assigned to them. Testers and admins see every bug in the project.', 'see missing hidden visible list developer'),
+        ('How do I change a bug''s status?', 'Open the bug and use the buttons in the Status panel. Each role can only make its own moves: developers start and resolve work, testers close or reopen resolved bugs.', 'status change move workflow progress resolve'),
+        ('How do I reopen a bug that isn''t really fixed?', 'When a bug is Resolved, a tester can click ''Reopen''. It goes back to the developer as Reopened. Add a comment explaining what still fails.', 'reopen fixed again broken still fail verify'),
+        ('Can I reopen a closed bug?', 'No. Closed is the final state, meaning a tester verified the fix. If the problem comes back, report a new bug and mention the old bug''s ID (for example #1a2b3c4d) in the description.', 'closed reopen final undo'),
+        ('How do I become a developer or admin?', 'Everyone joins a project as a Tester. Your project admin can change your role on the Users page. To run your own project, register with ''Request admin access'' and the owners will review it.', 'role developer admin promote permission become change'),
+        ('How do I invite my team?', 'Admins can find the project''s invite code on the Dashboard. Teammates enter it when they register. You can regenerate the code at any time if it was shared by mistake.', 'invite code join team member add project'),
+        ('How do I turn off email notifications?', 'Go to Settings and switch off ''Email notifications''. You will still see notifications in the app.', 'email notifications turn off stop unsubscribe settings'),
+        ('Who do I contact if I''m stuck?', 'Type your question in this chat. If there is no answer here, send it to your project admin and you''ll get a notification when they reply.', 'contact help support admin stuck question')
+    ) as d(question, answer, keywords)
+where not exists (select 1 from faqs f where f.project_id = p.id);
+
 -- 6. Lock new tables to the backend (same as the existing ones) ---------------
 alter table projects enable row level security;
 alter table notifications enable row level security;
@@ -109,11 +127,27 @@ alter table admin_requests enable row level security;
 alter table faqs enable row level security;
 alter table support_questions enable row level security;
 
+-- 6b. Backend access (service_role) to every table; see migration 003.
+grant usage on schema public to service_role;
+
+grant select, insert, update, delete on table
+    public.projects,
+    public.users,
+    public.bugs,
+    public.comments,
+    public.bug_history,
+    public.notifications,
+    public.admin_requests,
+    public.faqs,
+    public.support_questions
+to service_role;
+
+-- Tables created later in this schema get the same access automatically.
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+
 -- 7. Make yourself (and your team) owners - edit the emails, then run: ---------
 -- update users set role = 'owner', project_id = null where email in ('you@example.com');
 
 -- 8. Show the invite code of the default project ------------------------------
 select name, invite_code from projects order by created_at;
 
--- Note: the Default Project has no FAQs yet. Its admin can add them on the
--- Help Center page (new projects get a starter set automatically).

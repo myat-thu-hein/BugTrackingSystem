@@ -171,6 +171,28 @@ create table if not exists support_questions (
 create index if not exists idx_support_questions_project on support_questions (project_id, status);
 
 -- ---------------------------------------------------------------------
+-- Backend access: the Flask API connects as service_role. Grant it every
+-- table explicitly (some Supabase projects don't do it automatically, which
+-- caused "permission denied for table faqs"). anon/authenticated get nothing.
+-- ---------------------------------------------------------------------
+grant usage on schema public to service_role;
+
+grant select, insert, update, delete on table
+    public.projects,
+    public.users,
+    public.bugs,
+    public.comments,
+    public.bug_history,
+    public.notifications,
+    public.admin_requests,
+    public.faqs,
+    public.support_questions
+to service_role;
+
+-- Tables created later in this schema get the same access automatically.
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+
+-- ---------------------------------------------------------------------
 -- Row Level Security
 --
 -- The Flask backend connects with the SERVICE ROLE key and enforces all

@@ -29,7 +29,8 @@ bug-tracking-backend/
 │   ├── test_*.py            # fast offline suite (runs by default)
 │   └── integration/         # opt-in tests against a real Supabase project
 ├── scripts/check_supabase.py   # connectivity check (was test_supabase.py)
-├── sql/schema.sql  sql/migrations/001_projects_notifications_support.sql
+├── sql/schema.sql  sql/migrations/001_projects_notifications_support.sql, 002_seed_starter_faqs.sql,
+│                   003_grant_service_role.sql
 ├── postman/
 ├── .env.example  requirements.txt  requirements-dev.txt  pytest.ini
 ├── run.py  Procfile  README.md
@@ -71,8 +72,14 @@ and every error reaches the client in the same `{"success": false, "message": ..
      admin_requests, faqs, support_questions).
    - **Database from the older version:** paste
      `sql/migrations/001_projects_notifications_support.sql` and run it. It keeps
-     your data, moves everyone into a "Default Project", and prints that
-     project's invite code at the end.
+     your data, moves everyone into a "Default Project", adds the starter help-chat
+     FAQs, and prints that project's invite code at the end.
+   - **Then, for any existing database, run `sql/migrations/003_grant_service_role.sql`**
+     (safe to re-run). It lets the backend use every table; without it some
+     projects fail with `permission denied for table faqs`.
+   - **Already ran migration 001 from the earlier v2 zip?** Also run
+     `sql/migrations/002_seed_starter_faqs.sql` once. That version left
+     "Default Project" with an empty FAQ, so the help chat couldn't answer anything.
 3. Go to **Project Settings → API** and copy:
    - **Project URL** → `SUPABASE_URL`
    - **`service_role` secret key** → `SUPABASE_KEY`
@@ -148,12 +155,25 @@ them) and only for important events: admin request (to owners), request
 decided, assigned to you, ready to verify, reopened, role changed, support
 question (to admins). Each user can turn them off in Settings.
 
+### Check your deployment
+Open `https://<your-backend>/api/health/setup` in a browser. It lists every
+database table as `ok` or `missing or out of date`, counts the FAQs, says
+whether live notifications are on, and gives the exact fix for anything
+wrong. `"success": true` means everything is set up.
+
 ### Live notifications
 `GET /api/notifications/stream` is a Server-Sent Events stream: the server
 pushes each notification the moment it is created. The browser reconnects
 automatically and re-syncs over normal HTTP, so nothing is missed. Because
 connected tabs are tracked in memory, run **one** gunicorn process with
 threads (the `Procfile` already does: `--worker-class gthread --workers 1 --threads 32`).
+
+**Render ignores the `Procfile` when a Start Command is set in its dashboard.**
+Check Render → your backend → Settings → Start Command. If it is the old
+`gunicorn run:app --bind 0.0.0.0:$PORT`, the server handles one request at a
+time. The app detects this and switches to checking for notifications every
+10 seconds (everything still works), but for instant notifications change it to
+the command in the `Procfile`.
 
 ---
 
@@ -209,6 +229,7 @@ your project**: you never see or touch another project's bugs or members
 | GET | `/api/support/faqs` | member | Project FAQs, most helpful first |
 | POST | `/api/support/faqs/<id>/hit` | member | "That helped" counter |
 | POST / PUT / DELETE | `/api/support/faqs[/<id>]` | admin | Manage FAQs (`question`, `answer`, `keywords`) |
+| POST | `/api/support/faqs/defaults` | admin | Add the starter FAQs the project doesn't have yet (safe to repeat) |
 | POST | `/api/support/questions` | member | Ask the admins (they get a notification + email) |
 | GET | `/api/support/questions` | member | Admins: all; others: their own |
 | PUT | `/api/support/questions/<id>/answer` | admin | `{ "answer", "add_to_faq": true }`; the asker is notified |
@@ -356,6 +377,10 @@ pytest tests/integration -v
 | `403 Join or create a project first` | Account has no project yet | Sign in on the website; the Welcome page lets you join with a code or create a project |
 | Registering says "Invite code not found" | Typo, or the admin made a new code | Copy the current code from the admin dashboard |
 | Bell never updates until refresh | Several gunicorn workers, or a proxy buffering the stream | Use the `Procfile` command (1 worker, threads) |
+| `permission denied for table faqs` (code `42501`) in the backend log | The table exists but was never granted to `service_role` | Run `sql/migrations/003_grant_service_role.sql` in the Supabase SQL Editor; `/api/health/setup` then shows every table `ok` |
+| `httpx.ReadError: [WinError 10035] A non-blocking socket operation could not be completed immediately` (Windows) | The Supabase library shared one HTTP/2 connection between parallel requests | Fixed in this version (the backend talks to Supabase over HTTP/1.1). Re-copy the backend files and restart `python run.py` |
+| "Couldn't load the FAQ" / Help Center error / "The server ran into a problem (error 502)" with an older version | One sync worker + an open live-notification stream blocked every other request | Update to this version (it stops streaming on such servers), and set Render's Start Command to the `Procfile` command |
+| Help chat says "no FAQs yet" / never finds an answer | The project's FAQ is empty (e.g. made by the first version of migration 001) | Run `sql/migrations/002_seed_starter_faqs.sql`, or click **Add starter FAQs** on the Help Center page |
 | No emails arrive | SMTP not configured or wrong app password | Check the server log for `Email (SMTP not configured` or `Failed to send email` |
 | App crashes on Render but works locally | Missing environment variables in Render's dashboard | Re-add all vars from `.env.example` under Render → Environment |
 

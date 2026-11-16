@@ -153,7 +153,12 @@ def test_email_preference_is_respected(client, outbox, headers, people, bug_id):
 
 
 def test_live_stream_pushes_new_notifications(client, headers, people, bug_id):
-    resp = client.get("/api/notifications/stream", headers=headers["developer"], buffered=False)
+    resp = client.get(
+        "/api/notifications/stream",
+        headers=headers["developer"],
+        buffered=False,
+        environ_overrides={"wsgi.multithread": True},  # like gunicorn's gthread worker
+    )
     assert resp.status_code == 200 and resp.mimetype == "text/event-stream"
     chunks = iter(resp.response)
     assert next(chunks).startswith(b"retry:")
@@ -209,3 +214,88 @@ def test_owner_sees_all_projects(client, headers, bug_id):
     assert projects[0]["bug_count"] == 1 and projects[0]["member_count"] == 4
     assert client.get("/api/projects", headers=headers["admin"]).status_code == 403
     assert client.get("/api/bugs", headers=owner_h).status_code == 403
+
+
+def test_starter_faqs_can_be_added_to_an_empty_project(client, headers):
+    # The `project` fixture has no FAQs, like a project created by the migration.
+    assert client.get("/api/support/faqs", headers=headers["tester"]).get_json()["data"]["faqs"] == []
+    assert client.post("/api/support/faqs/defaults", headers=headers["tester"]).status_code == 403
+
+    first = client.post("/api/support/faqs/defaults", headers=headers["admin"])
+    assert first.status_code == 201 and len(first.get_json()["data"]["faqs"]) >= 5
+    count = len(client.get("/api/support/faqs", headers=headers["tester"]).get_json()["data"]["faqs"])
+
+    again = client.post("/api/support/faqs/defaults", headers=headers["admin"])  # safe to repeat
+    assert again.status_code == 200 and again.get_json()["data"]["faqs"] == []
+    assert len(client.get("/api/support/faqs", headers=headers["tester"]).get_json()["data"]["faqs"]) == count
+
+
+def test_stream_refuses_single_threaded_servers(client, headers):
+    # gunicorn's default "sync" worker handles one request at a time: an open
+    # stream used to block every other request (the FAQ failed with 5xx).
+    resp = client.get("/api/notifications/stream", headers=headers["developer"])  # test client = single-threaded
+    assert resp.status_code == 503 and "every few seconds" in resp.get_json()["message"]
+    multi = client.get(
+        "/api/notifications/stream",
+        headers=headers["developer"],
+        environ_overrides={"wsgi.multithread": True, "wsgi.multiprocess": True},  # several worker processes
+    )
+    assert multi.status_code == 503
+    # Everything else keeps working regardless.
+    assert client.get("/api/support/faqs", headers=headers["developer"]).status_code == 200
+
+
+def test_setup_check_reports_problems(client, headers):
+    report = client.get("/api/health/setup").get_json()
+    assert report["data"]["database_tables"]["faqs"] == "ok"
+    assert report["data"]["faq_count"] == 0 and report["success"] is False
+    assert any("No FAQs" in p for p in report["data"]["problems"])
+    assert any("Start Command" in fix for fix in report["data"]["how_to_fix"])  # single-threaded test server
+
+    client.post("/api/support/faqs/defaults", headers=headers["admin"])
+    good = client.get("/api/health/setup", environ_overrides={"wsgi.multithread": True}).get_json()
+    assert good["success"] is True and good["data"]["live_notifications"] == "on"
+
+
+def test_missing_table_gives_actionable_error(client, db, headers):
+    del db.tables["faqs"]  # like a database where the migration wasn't run
+    resp = client.get("/api/support/faqs", headers=headers["tester"])
+    assert resp.status_code == 500 and "Run the latest SQL migration" in resp.get_json()["message"]
+    assert client.get("/api/health/setup").get_json()["data"]["database_tables"]["faqs"] == "missing or out of date"
+
+
+def test_permission_denied_gives_actionable_error(client, db, headers):
+    # The real error from Supabase when a table was never granted to service_role.
+    db.denied = {"faqs", "support_questions"}
+    resp = client.get("/api/support/faqs", headers=headers["tester"])
+    assert resp.status_code == 500 and "003_grant_service_role.sql" in resp.get_json()["message"]
+    report = client.get("/api/health/setup").get_json()["data"]
+    assert report["database_tables"]["faqs"] == "no permission"
+    assert report["database_tables"]["bugs"] == "ok"
+    assert any("003_grant_service_role.sql" in fix for fix in report["how_to_fix"])
+
+
+def test_database_network_errors_are_temporary_503(client, db, headers, monkeypatch):
+    import httpx
+
+    def boom(self):
+        raise httpx.ReadError("[WinError 10035] A non-blocking socket operation could not be completed immediately")
+
+    monkeypatch.setattr(type(db.table("faqs")), "execute", boom)
+    resp = client.get("/api/health/setup")  # unauthenticated path still answers
+    assert resp.status_code == 200
+    resp = client.get("/api/support/faqs", headers=headers["tester"])
+    assert resp.status_code == 503 and "try again" in resp.get_json()["message"].lower()
+
+
+def test_real_supabase_client_uses_http1():
+    """WinError 10035 came from one shared HTTP/2 connection used by many threads."""
+    pytest = __import__("pytest")
+    supabase = pytest.importorskip("supabase")
+    from app.services.supabase_http import use_http1_for_postgrest
+
+    use_http1_for_postgrest()
+    key = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.c2lnbmF0dXJl"
+    session = supabase.create_client("https://example.supabase.co", key).postgrest.session
+    assert session._transport._pool._http2 is False
+    assert session.headers.get("apikey") == key and str(session.base_url).endswith("/rest/v1/")

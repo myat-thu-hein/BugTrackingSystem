@@ -9,6 +9,7 @@ answer, which go to the project admins.
   POST   /api/support/faqs                    - add an FAQ                  (admin)
   PUT    /api/support/faqs/<id>               - edit an FAQ                 (admin)
   DELETE /api/support/faqs/<id>               - delete an FAQ               (admin)
+  POST   /api/support/faqs/defaults           - add the starter FAQs        (admin)
   POST   /api/support/questions               - ask the admins              (members)
   GET    /api/support/questions               - open + recent questions     (admin) / your own (others)
   PUT    /api/support/questions/<id>/answer   - {"answer", "add_to_faq"}    (admin)
@@ -27,6 +28,7 @@ from app.extensions import get_db
 from app.middleware.auth import token_required
 from app.middleware.permissions import project_required, role_required
 from app.services.notification_service import NotificationType, notify, project_admin_ids
+from app.services.project_service import seed_default_faqs
 from app.services.user_service import fetch_user_names
 from app.utils.request import first_row, json_body
 from app.utils.responses import success_response
@@ -92,6 +94,21 @@ def create_faq():
         get_db().table("faqs").insert({**_faq_fields(json_body()), "project_id": g.current_user["project_id"], "hits": 0}).execute()
     )
     return success_response("FAQ added", {"faq": row}, 201)
+
+
+@support_bp.route("/faqs/defaults", methods=["POST"])
+@token_required
+@project_required
+@role_required("admin")
+def add_default_faqs():
+    """
+    Projects created before the help chat existed (e.g. the "Default Project"
+    made by the database migration) start with an empty FAQ, so the chat can't
+    answer anything. This adds the starter questions; existing ones are kept.
+    """
+    added = seed_default_faqs(g.current_user["project_id"])
+    message = f"Added {len(added)} starter FAQ{'s' if len(added) != 1 else ''}" if added else "All starter FAQs are already there"
+    return success_response(message, {"faqs": added}, 201 if added else 200)
 
 
 @support_bp.route("/faqs/<faq_id>", methods=["PUT"])

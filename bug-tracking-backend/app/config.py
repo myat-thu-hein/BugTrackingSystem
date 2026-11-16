@@ -86,5 +86,10 @@ def create_supabase_client(config=Config):
     """
     from supabase import create_client
 
+    from app.services.supabase_http import use_http1_for_postgrest
+
     validate_config(config)
+    # One shared HTTP/2 connection breaks under parallel requests (WinError
+    # 10035 on Windows); HTTP/1.1 gives each request its own connection.
+    use_http1_for_postgrest()
     return create_client(config.SUPABASE_URL, config.SUPABASE_KEY)

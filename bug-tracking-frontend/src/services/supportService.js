@@ -32,3 +32,9 @@ export async function getQuestions({ signal } = {}) {
 export async function answerQuestion(id, answer, addToFaq) {
   return unwrap(await api.put(`/api/support/questions/${id}/answer`, { answer, add_to_faq: addToFaq }))
 }
+
+// Admin: add the starter questions the project doesn't have yet. Resolves to { faqs, message }.
+export async function addDefaultFaqs() {
+  const response = await api.post('/api/support/faqs/defaults')
+  return { ...unwrap(response), message: response.data?.message }
+}

@@ -5,6 +5,59 @@ Two cleanup passes. Original features, URLs and API responses are unchanged; the
 
 ---
 
+# Fix: errors from the backend log (Windows, local run)
+
+| Error in the log | Root cause | Fix |
+|---|---|---|
+| `postgrest.exceptions.APIError: permission denied for table faqs` / `support_questions` (`42501`) | The tables existed, but the backend's `service_role` had never been granted access to them, so every FAQ / Help Center request returned 500 | `sql/migrations/003_grant_service_role.sql` grants `service_role` (only) access to all 9 tables, plus default privileges for future tables; `schema.sql` and migration 001 now include the same grants. The API now says which migration to run, and `/api/health/setup` reports `no permission` per table. Reproduced and verified on PostgreSQL 16 with Supabase-like roles. |
+| `httpx.ReadError: [WinError 10035] A non-blocking socket operation could not be completed immediately` | supabase-py's database client always uses one shared HTTP/2 connection; the threaded server's parallel requests (page loads, notifications, live stream) read it at the same time, which breaks on Windows | `app/services/supabase_http.py` makes the client use HTTP/1.1, so httpx gives each parallel request its own pooled connection. Verified: 600 requests from 30 threads through the real supabase client, 600 correct, 0 errors. Network errors to Supabase now return a temporary 503 ("please try again") instead of 500. |
+
+Verified: 56 backend tests (new: permission-denied message and setup report, network error → 503, real client
+uses HTTP/1.1), frontend unchanged (44 tests, lint, build).
+
+---
+
+# Fix: "Couldn't load the FAQ" and Help Center "Something went wrong"
+
+**Root cause:** on Render, the dashboard's Start Command overrides the `Procfile`. With the old command
+(`gunicorn run:app`, one single-threaded "sync" worker) each browser tab's live-notification stream occupied
+the only worker. Every other request queued behind it until gunicorn killed the worker after 30 s
+(`WORKER TIMEOUT`), and Render returned 5xx errors. The FAQ endpoints were the first requests made after the
+stream opened, so the chat and Help Center failed. Reproduced locally with gunicorn (FAQ request: 29.9 s, then
+a worker timeout).
+
+**Fix:**
+- The stream only runs where it's safe (threaded/async worker, single process; read from `wsgi.multithread`
+  / `wsgi.multiprocess`). Otherwise it answers 503 immediately and the browser checks every 10 s instead,
+  still showing toasts. Streams now last 55 s instead of 300 s.
+- `GET /api/health/setup`: plain-language check of every table, the FAQ count and live-notification support,
+  with the exact fix for each problem.
+- Missing table/column errors from Supabase now say "Run the latest SQL migration" instead of a bare 500.
+- The frontend shows the server's specific message or the status code ("error 502") instead of a generic
+  "Something went wrong".
+
+Verified: 53 backend tests (new: stream refusal, setup check, missing-table message, with the fake DB raising
+Supabase's `PGRST205`); browser runs on real gunicorn with both start commands. Sync worker: everything loads,
+notification delivered in 7 s by polling. Gthread worker: instant. No worker timeouts with either.
+
+---
+
+# Fix: help chat / FAQ not working
+
+| # | Symptom | Root cause | Fix |
+|---|---|---|---|
+| 1 | Chat said "No FAQs yet" and could never answer, in a database upgraded with migration 001 | The migration created "Default Project" but no FAQs; only projects created in the app got the starter set | New `002_seed_starter_faqs.sql` (and migration 001 now seeds them too); **Add starter FAQs** button on the empty Help Center; `POST /api/support/faqs/defaults` |
+| 2 | After one failed load (e.g. Render waking up) the chat stayed empty until a page reload | The error was stored as "no FAQs" (`[]`) and never retried | Errors show **Try again**; the FAQ reloads each time the chat opens; a failed refresh keeps the FAQs already loaded |
+| 3 | A question typed right after opening the chat got "couldn't find an answer" | It was matched against the list while it was still loading (or the old list while refreshing) | Questions wait for the load in progress |
+| 4 | Most-asked suggestions, and FAQs an admin added later, disappeared after the first question | Suggestions only rendered while the conversation had one message | A "Most asked" row is always visible above the input |
+| 5 | Typos ("notifcation"), partial words ("notif"), Thai/Burmese text never matched | Exact word matching only, and every non a–z character was stripped | Typo- and prefix-tolerant matching, Unicode letters kept, character-pair matching for languages without spaces |
+
+Verified: backend 50 tests (new: starter FAQs, repeatable), frontend 44 tests (new: typos, partial words, Thai,
+accents, still rejecting unrelated words); a browser run reproducing each case above (10/10 pass, no page
+errors); migrations 001 → 002 run twice on PostgreSQL 16 (0 → 9 FAQs, then unchanged).
+
+---
+
 # Pass 3: new features (projects, owner approval, live notifications, email, help chat)
 
 Built on top of pass 2; every earlier feature still works the same inside a project.

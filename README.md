@@ -43,6 +43,6 @@ Use three windows (or one normal + two private windows), one per person.
 3. Frontend: `cd bug-tracking-frontend && npm install && cp .env.example .env && npm run dev`.
 4. Checkpoint: open `http://localhost:5173`, register with an owner email, and you land on **Admin Requests**.
 
-Upgrading a database made with the older version? Run `bug-tracking-backend/sql/migrations/001_projects_notifications_support.sql` once.
+Upgrading a database made with an older version? In the Supabase SQL Editor run, in order: `bug-tracking-backend/sql/migrations/001_projects_notifications_support.sql` (if not run yet), `002_seed_starter_faqs.sql` and `003_grant_service_role.sql`. All three are safe to re-run.
 
 See [REFACTOR_NOTES.md](REFACTOR_NOTES.md) for what changed in each cleanup pass, the bugs found, and how it was verified.
