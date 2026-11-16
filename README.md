@@ -7,7 +7,7 @@ A team bug tracker for multiple projects, with an enforced workflow
 
 | Feature | How it works |
 |---|---|
-| **Projects + invite codes** | An admin creates a project and gets a code like `BUG-7KQ2X9`. Teammates register with it and join as Testers; the admin promotes them. Each project's bugs and members are invisible to other projects. |
+| **Projects + invite codes** | An admin creates a project and gets a code like `BUG-7KQ2Xt9`. Teammates register with it and join as Testers; the admin promotes them. Each project's bugs and members are invisible to other projects. |
 | **Owner approval for admins** | "Request admin access" on the Register page notifies and emails the owners (you and your team, set in `OWNER_EMAILS`), who approve or reject in the app. |
 | **Live notifications** | Bell with unread badge, toasts and a Notifications page, updated instantly over Server-Sent Events. Open dashboards, lists and bug pages refresh themselves when something changes. |
 | **Email** | Important events only (assigned to you, ready to verify, reopened, role changed, admin requests, support questions). Off switch in Settings. Works with any SMTP account, e.g. Gmail. |
